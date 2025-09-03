@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Operator Panel - Gaming Center</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #1e1e2f;
+      color: #fff;
+      text-align: center;
+      padding: 20px;
+    }
+    .card {
+      background: #2a2a40;
+      padding: 20px;
+      border-radius: 12px;
+      max-width: 900px;
+      margin: auto;
+      box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
+    }
+    input, button, select {
+      padding: 8px;
+      margin: 5px;
+      border-radius: 6px;
+      border: none;
+      font-size: 14px;
+    }
+    button {
+      background: #4cafef;
+      color: #fff;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button:hover { background: #2196f3; }
+    #logoutBtn { background: crimson; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    table, th, td {
+      border: 1px solid #555;
+    }
+    th, td {
+      padding: 8px;
+      text-align: center;
+    }
+    .active { color: lightgreen; font-weight: bold; }
+    .expired { color: red; font-weight: bold; }
+    .paused { color: orange; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <!-- Login Page -->
+  <div id="loginPage" class="card">
+    <h2>🔑 Operator Login</h2>
+    <input type="text" id="opUser" placeholder="Username"><br>
+    <input type="password" id="opPass" placeholder="Password"><br>
+    <button onclick="opLogin()">Login</button>
+    <p id="loginError" style="color:red;"></p>
+  </div>
+
+  <!-- Operator Dashboard -->
+  <div id="operatorPage" class="card" style="display:none;">
+    <h2>🎮 Gaming Center - Operator Panel</h2>
+    <button id="logoutBtn" onclick="opLogout()">Logout</button>
+
+    <h3>Add New Member</h3>
+    <input type="text" id="newMemberId" placeholder="Member ID">
+    <button onclick="addMember()">Add Member</button>
+
+    <h3>Members</h3>
+    <table id="memberTable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Status</th>
+          <th>Remaining</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <br>
+    <button onclick="downloadGlobalReport()">⬇ Download All Members Report (CSV)</button>
+  </div>
+
+  <script>
+    let members = JSON.parse(localStorage.getItem("members") || "[]");
+    let operatorLoggedIn = localStorage.getItem("operatorLoggedIn") === "true";
+
+    // ✅ Operator Login
+    function opLogin() {
+      const user = document.getElementById("opUser").value.trim();
+      const pass = document.getElementById("opPass").value.trim();
+      if (user === "admin" && pass === "admin") {
+        localStorage.setItem("operatorLoggedIn", "true");
+        operatorLoggedIn = true;
+        showOperatorPage();
+      } else {
+        document.getElementById("loginError").innerText = "Invalid Username or Password!";
+      }
+    }
+
+    // ✅ Logout
+    function opLogout() {
+      localStorage.removeItem("operatorLoggedIn");
+      operatorLoggedIn = false;
+      document.getElementById("operatorPage").style.display = "none";
+      document.getElementById("loginPage").style.display = "block";
+    }
+
+    // ✅ Show Operator Page
+    function showOperatorPage() {
+      document.getElementById("loginPage").style.display = "none";
+      document.getElementById("operatorPage").style.display = "block";
+      renderMembers();
+    }
+
+    // ✅ Add Member
+    function addMember() {
+      const id = document.getElementById("newMemberId").value.trim();
+      if (!id) return alert("Enter a valid Member ID!");
+      if (members.find(m => m.id === id)) return alert("Member already exists!");
+
+      members.push({
+        id: id,
+        remainingTime: 10 * 60 * 60 * 1000, // 10 hours
+        active: false,
+        lastLogin: null,
+        history: []
+      });
+      saveMembers();
+      renderMembers();
+      document.getElementById("newMemberId").value = "";
+    }
+
+    // ✅ Remove Member
+    function removeMember(id) {
+      if (!confirm("Remove this member?")) return;
+      members = members.filter(m => m.id !== id);
+      saveMembers();
+      renderMembers();
+    }
+
+    // ✅ Recharge Member
+    function rechargeMember(id) {
+      const hours = prompt("Enter hours to recharge:", "10");
+      if (!hours || isNaN(hours)) return;
+      const member = members.find(m => m.id === id);
+      member.remainingTime += parseInt(hours) * 60 * 60 * 1000;
+      saveMembers();
+      renderMembers();
+    }
+
+    // ✅ Download Per-Member Report
+    function downloadMemberReport(id) {
+      const member = members.find(m => m.id === id);
+      if (!member) return;
+      let csv = "Login Time,Logout Time,Duration (minutes)\n";
+      member.history.forEach(h => {
+        csv += `${new Date(h.login).toLocaleString()},${h.logout ? new Date(h.logout).toLocaleString() : "Active"},${h.duration}\n`;
+      });
+      downloadCSV(csv, `Member_${id}_Report.csv`);
+    }
+
+    // ✅ Download Global Report
+    function downloadGlobalReport() {
+      let csv = "ID,Status,Remaining Time (minutes)\n";
+      members.forEach(m => {
+        let status = m.active ? "Active" : (m.remainingTime <= 0 ? "Expired" : "Paused");
+        csv += `${m.id},${status},${Math.floor(m.remainingTime / 60000)}\n`;
+      });
+      downloadCSV(csv, "All_Members_Report.csv");
+    }
+
+    // ✅ Download CSV Helper
+    function downloadCSV(content, filename) {
+      const blob = new Blob([content], { type: "text/csv" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+    }
+
+    // ✅ Render Member Table
+    function renderMembers() {
+      const tbody = document.querySelector("#memberTable tbody");
+      tbody.innerHTML = "";
+      members.forEach(m => {
+        let status = m.active ? "Active" : (m.remainingTime <= 0 ? "Expired" : "Paused");
+        let cssClass = status.toLowerCase();
+
+        let row = `<tr>
+          <td>${m.id}</td>
+          <td class="${cssClass}">${status}</td>
+          <td>${formatTime(m.remainingTime)}</td>
+          <td>
+            <button onclick="rechargeMember('${m.id}')">Recharge</button>
+            <button onclick="removeMember('${m.id}')">Remove</button>
+            <button onclick="downloadMemberReport('${m.id}')">Report</button>
+          </td>
+        </tr>`;
+        tbody.innerHTML += row;
+      });
+    }
+
+    // ✅ Format Time
+    function formatTime(ms) {
+      let h = Math.floor(ms / (1000 * 60 * 60));
+      let m = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+      return `${h}h ${m}m`;
+    }
+
+    // ✅ Save Members
+    function saveMembers() {
+      localStorage.setItem("members", JSON.stringify(members));
+    }
+
+    // ✅ Restore Operator Session
+    window.onload = function() {
+      if (operatorLoggedIn) {
+        showOperatorPage();
+      }
+    };
+  </script>
+</body>
+</html>

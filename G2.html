@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Member Login - Gaming Center</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #121212;
+      color: #fff;
+      padding: 20px;
+      text-align: center;
+    }
+    .card {
+      background: #1f1f2f;
+      padding: 20px;
+      border-radius: 12px;
+      margin: 20px auto;
+      max-width: 400px;
+      box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
+    }
+    input, button {
+      padding: 8px;
+      margin: 5px;
+      border-radius: 6px;
+      border: none;
+      font-size: 14px;
+      width: 80%;
+    }
+    button {
+      background: #4cafef;
+      color: #fff;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button:hover { background: #2196f3; }
+    .logoutBtn { background: crimson; }
+    .time-display {
+      font-size: 18px;
+      font-weight: bold;
+      margin: 15px 0;
+    }
+  </style>
+</head>
+<body>
+  <h2>🎮 Member Portal</h2>
+
+  <!-- Login Card -->
+  <div class="card" id="loginCard">
+    <h3>🔑 Login</h3>
+    <input type="text" id="memberId" placeholder="Member ID"><br>
+    <input type="password" id="memberPass" placeholder="Password"><br>
+    <button onclick="memberLogin()">Login</button>
+    <p id="loginError" style="color:red;"></p>
+  </div>
+
+  <!-- Member Dashboard -->
+  <div class="card" id="memberCard" style="display:none;">
+    <h3>👤 <span id="memberName"></span></h3>
+    <div class="time-display">⏳ Remaining: <span id="remainingTime">--</span></div>
+    <div>
+      <button onclick="startSession()">▶ Start</button>
+      <button onclick="stopSession()">⏸ Stop</button>
+      <button class="logoutBtn" onclick="logout()">🚪 Logout</button>
+    </div>
+  </div>
+
+  <script>
+    let members = JSON.parse(localStorage.getItem("members") || "[]");
+    let currentUser = JSON.parse(localStorage.getItem("currentMember") || "null");
+    let timers = {};
+    let reminderTimer = null;
+
+    // ✅ Login
+    function memberLogin() {
+      const id = document.getElementById("memberId").value.trim();
+      const pass = document.getElementById("memberPass").value.trim();
+      const member = members.find(m => m.id === id);
+
+      if (!member || id !== pass) {
+        document.getElementById("loginError").innerText = "Invalid Member ID or Password!";
+        return;
+      }
+
+      currentUser = { id: id, active: false, lastLogin: null };
+      localStorage.setItem("currentMember", JSON.stringify(currentUser));
+      showDashboard();
+    }
+
+    // ✅ Logout
+    function logout() {
+      stopSession();
+      currentUser = null;
+      localStorage.removeItem("currentMember");
+      document.getElementById("memberCard").style.display = "none";
+      document.getElementById("loginCard").style.display = "block";
+    }
+
+    // ✅ Start Session
+    function startSession() {
+      if (!currentUser) return;
+      let member = members.find(m => m.id === currentUser.id);
+      if (!member) return;
+
+      if (member.remainingTime <= 0) {
+        alert("Membership expired!");
+        return;
+      }
+
+      if (!currentUser.active) {
+        currentUser.active = true;
+        currentUser.lastLogin = Date.now();
+        localStorage.setItem("currentMember", JSON.stringify(currentUser));
+      }
+
+      runTimer();
+    }
+
+    // ✅ Stop Session
+    function stopSession() {
+      if (!currentUser || !currentUser.active) return;
+
+      let member = members.find(m => m.id === currentUser.id);
+      if (!member) return;
+
+      let now = Date.now();
+      let used = now - currentUser.lastLogin;
+      member.remainingTime -= used;
+      if (member.remainingTime < 0) member.remainingTime = 0;
+
+      currentUser.active = false;
+      member.history.push({
+        login: currentUser.lastLogin,
+        logout: now,
+        duration: Math.floor(used / 60000)
+      });
+
+      saveMembers();
+      localStorage.setItem("currentMember", JSON.stringify(currentUser));
+
+      clearInterval(timers[currentUser.id]);
+      clearInterval(reminderTimer);
+      updateRemainingDisplay();
+    }
+
+    // ✅ Timer
+    function runTimer() {
+      let member = members.find(m => m.id === currentUser.id);
+      clearInterval(timers[currentUser.id]);
+      clearInterval(reminderTimer);
+
+      timers[currentUser.id] = setInterval(() => {
+        if (!currentUser.active) return;
+        let now = Date.now();
+        let used = now - currentUser.lastLogin;
+        let remaining = member.remainingTime - used;
+
+        if (remaining <= 0) {
+          member.remainingTime = 0;
+          stopSession();
+          alert("⏰ Time over!");
+        } else {
+          document.getElementById("remainingTime").innerText = formatTime(remaining);
+        }
+      }, 1000);
+
+      // Reminder every 1 hour
+      reminderTimer = setInterval(() => {
+        alert(`⏰ Reminder: You have played 1 hour this session!`);
+      }, 3600000);
+    }
+
+    // ✅ Format Time
+    function formatTime(ms) {
+      let h = Math.floor(ms / (1000 * 60 * 60));
+      let m = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+      let s = Math.floor((ms % (1000 * 60)) / 1000);
+      return `${h}h ${m}m ${s}s`;
+    }
+
+    // ✅ Update UI
+    function updateRemainingDisplay() {
+      if (!currentUser) return;
+      let member = members.find(m => m.id === currentUser.id);
+      if (member) {
+        document.getElementById("remainingTime").innerText = formatTime(member.remainingTime);
+      }
+    }
+
+    // ✅ Save
+    function saveMembers() {
+      localStorage.setItem("members", JSON.stringify(members));
+    }
+
+    // ✅ Restore session on reload
+    function showDashboard() {
+      document.getElementById("loginCard").style.display = "none";
+      document.getElementById("memberCard").style.display = "block";
+      document.getElementById("memberName").innerText = currentUser.id;
+      updateRemainingDisplay();
+      if (currentUser.active) runTimer();
+    }
+
+    window.onload = function() {
+      if (currentUser) {
+        showDashboard();
+      }
+    };
+  </script>
+</body>
+</html>
