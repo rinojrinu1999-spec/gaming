@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Operator Panel</title>
+  <style>
+    body { font-family: Arial, sans-serif; background:url('1000260146.jpg') no-repeat center center/cover; margin:0; color:#fff; }
+    .container { background:rgba(0,0,0,0.7); padding:20px; margin:20px; border-radius:12px; }
+    h1 { text-align:center; }
+    input, button { padding:10px; margin:5px; border-radius:8px; border:none; }
+    button { background:#1e90ff; color:#fff; cursor:pointer; }
+    button:hover { background:#63b3ed; }
+    table { width:100%; margin-top:20px; border-collapse:collapse; }
+    th, td { padding:10px; border:1px solid #444; text-align:center; }
+    .status { margin-top:10px; font-weight:bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Operator Panel</h1>
+    <h3>Add Member</h3>
+    <input id="name" placeholder="Member Name">
+    <button onclick="addMember()">Add</button>
+    <h3>Recharge</h3>
+    <input id="rechargeId" placeholder="Member ID">
+    <input id="seconds" type="number" placeholder="Seconds">
+    <button onclick="recharge()">Recharge</button>
+    <h3>Members List</h3>
+    <button onclick="loadMembers()">Refresh</button>
+    <table id="membersTable">
+      <thead><tr><th>ID</th><th>Name</th><th>Remaining Time (s)</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="status" id="status"></div>
+  </div>
+  <script>
+    async function addMember() {
+      setStatus("⏳ Adding...");
+      let res = await fetch('/.netlify/functions/addMember', {
+        method:'POST', body:JSON.stringify({ name: document.getElementById('name').value })
+      });
+      setStatus(res.ok ? '✅ Added!' : '❌ Failed');
+      loadMembers();
+    }
+    async function recharge() {
+      setStatus("⏳ Recharging...");
+      let res = await fetch('/.netlify/functions/recharge', {
+        method:'POST', body:JSON.stringify({
+          member_id: document.getElementById('rechargeId').value,
+          seconds: parseInt(document.getElementById('seconds').value)
+        })
+      });
+      setStatus(res.ok ? '✅ Recharged!' : '❌ Failed');
+      loadMembers();
+    }
+    async function loadMembers() {
+      let res = await fetch('/.netlify/functions/getMembers');
+      let data = await res.json();
+      let tbody = document.querySelector('#membersTable tbody');
+      tbody.innerHTML = "";
+      data.forEach(m => {
+        tbody.innerHTML += `<tr><td>${m.member_id}</td><td>${m.name}</td><td>${m.remaining_seconds}</td></tr>`;
+      });
+    }
+    function setStatus(msg) { document.getElementById('status').innerText = msg; }
+    loadMembers();
+  </script>
+</body>
+</html>
